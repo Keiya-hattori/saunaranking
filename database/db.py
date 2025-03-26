@@ -16,6 +16,8 @@ DATABASE_URL = os.getenv(
     "postgresql://postgres:postgres@localhost:5432/sauna_db"  # デフォルト値
 )
 
+print(f"✅ DATABASE_URL in use: {DATABASE_URL}")
+
 # Renderのデータベース接続文字列対応
 # "postgres://" で始まる場合 "postgresql://" に置換
 if DATABASE_URL.startswith("postgres://"):
@@ -56,12 +58,13 @@ def init_db():
     注意: この関数はアプリケーション起動時に一度だけ実行する
     """
     try:
+        from models.database import SaunaDB  # noqa
+
         # テーブルが存在するか確認
         inspector = inspect(engine)
         if not inspector.has_table("saunas"):
             logger.info("saunasテーブルが存在しないため、作成を開始します")
             # モデルのインポート（循環インポートを避けるため、ここで行う）
-            from models.database import SaunaDB  # noqa
             
             # テーブルの作成
             Base.metadata.create_all(bind=engine)
