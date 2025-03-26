@@ -5,7 +5,6 @@ streamlit>=1.29.0
 
 # データベース関連
 sqlalchemy>=2.0.0
-sqlite3  # Pythonに標準搭載
 
 # データモデリング
 pydantic>=2.0.0
@@ -24,3 +23,7 @@ logging  # Pythonに標準搭載
 black>=23.0.0  # コードフォーマッター
 flake8>=6.1.0  # リンター
 pytest>=7.4.0  # テストフレームワーク
+
+# 既存の依存関係に追加
+psycopg2-binary>=2.9.9  # PostgreSQLアダプター
+python-dotenv>=1.0.0    # 環境変数管理

@@ -2,25 +2,24 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
-from pathlib import Path
+from dotenv import load_dotenv
 
-# データベースファイルのパスを設定
-BASE_DIR = Path(__file__).resolve().parent.parent
-DB_DIR = Path("data")
-DB_FILE = DB_DIR / "saunas.db"
+# .envファイルの読み込み
+load_dotenv()
 
-# データベース保存用ディレクトリが存在しない場合は作成
-DB_DIR.mkdir(parents=True, exist_ok=True)
+# PostgreSQL接続URLを環境変数から取得
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://postgres:postgres@localhost:5432/sauna_db"  # デフォルト値
+)
 
-# SQLiteのデータベースURL
-SQLALCHEMY_DATABASE_URL = f"sqlite:///{DB_FILE}"
+# Renderのデータベース接続文字列対応
+# "postgres://" で始まる場合 "postgresql://" に置換
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 # エンジンの作成
-# check_same_thread=False は SQLite を使用する際の制限を解除するために必要
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    connect_args={"check_same_thread": False}
-)
+engine = create_engine(DATABASE_URL)
 
 # セッションローカルの作成
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
