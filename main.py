@@ -4,6 +4,9 @@ from database.db import init_db, engine, Base
 from models.database import SaunaDB  # 明示的にインポート
 import logging
 from routers import sauna_ranking
+from force_create_tables import force_create_tables
+from sqlalchemy import inspect
+from sqlalchemy.sql import text
 
 # ロガーの設定
 logging.basicConfig(level=logging.INFO)
@@ -46,4 +49,54 @@ async def manual_init_db():
         return {"message": "データベーステーブルが正常に作成されました"}
     except Exception as e:
         logger.error(f"テーブル作成エラー: {e}")
-        return {"error": str(e)} 
+        return {"error": str(e)}
+
+# 新しいエンドポイント
+@app.get("/force-create-tables")
+async def manual_force_create_tables():
+    """強制的にテーブルを作成するエンドポイント"""
+    try:
+        force_create_tables()
+        return {"message": "テーブルを強制的に作成しました"}
+    except Exception as e:
+        logger.error(f"強制テーブル作成エラー: {e}")
+        return {"error": str(e)}
+
+@app.get("/debug-db")
+async def debug_database():
+    """データベース接続のデバッグ情報を返す"""
+    try:
+        # 接続テスト
+        result = {}
+        
+        # エンジン情報
+        result["engine_url"] = str(engine.url).replace(":********@", ":****@")
+        
+        # テーブル一覧
+        inspector = inspect(engine)
+        result["tables"] = inspector.get_table_names()
+        
+        # テーブル作成テスト
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+            result["connection_test"] = "成功"
+            
+            # スキーマ確認
+            schema_query = "SELECT schema_name FROM information_schema.schemata"
+            schemas = [row[0] for row in conn.execute(text(schema_query))]
+            result["schemas"] = schemas
+            
+            # 現在のユーザーと権限
+            user_query = "SELECT current_user, current_database()"
+            user_info = conn.execute(text(user_query)).fetchone()
+            result["current_user"] = user_info[0]
+            result["current_database"] = user_info[1]
+            
+        return result
+    except Exception as e:
+        logger.error(f"データベースデバッグエラー: {e}")
+        import traceback
+        return {
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        } 
