@@ -36,3 +36,8 @@ jobs:
             echo "Error: Scraping failed"
             exit 1
           fi
+
+      - name: Wake up Streamlit app
+        run: |
+          echo "Waking up Streamlit..."
+          curl -s https://sauna-ranking-ver2.onrender.com

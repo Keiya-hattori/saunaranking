@@ -50,7 +50,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-@st.cache_data(ttl=600)  # 10分間キャッシュ
+@st.cache_data(ttl=660)  # 2分間キャッシュ
 def get_sauna_ranking():
     """FastAPIエンドポイントからランキングデータを取得"""
     try:
