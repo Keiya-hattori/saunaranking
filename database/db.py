@@ -1,8 +1,11 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
 from dotenv import load_dotenv
+import logging
+
+logger = logging.getLogger(__name__)
 
 # .envファイルの読み込み
 load_dotenv()
@@ -19,7 +22,7 @@ if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 # エンジンの作成
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, echo=True)  # SQLログを出力
 
 # セッションローカルの作成
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -52,7 +55,20 @@ def init_db():
     
     注意: この関数はアプリケーション起動時に一度だけ実行する
     """
-    from models.database import SaunaDB  # 循環インポートを避けるためここでインポート
-    
-    # テーブルが存在しない場合のみ作成
-    Base.metadata.create_all(bind=engine) 
+    try:
+        # テーブルが存在するか確認
+        inspector = inspect(engine)
+        if not inspector.has_table("saunas"):
+            logger.info("saunasテーブルが存在しないため、作成を開始します")
+            # モデルのインポート（循環インポートを避けるため、ここで行う）
+            from models.database import SaunaDB  # noqa
+            
+            # テーブルの作成
+            Base.metadata.create_all(bind=engine)
+            logger.info("テーブルの作成が完了しました")
+        else:
+            logger.info("saunasテーブルは既に存在します")
+            
+    except Exception as e:
+        logger.error(f"テーブルの作成中にエラーが発生しました: {e}")
+        raise 
