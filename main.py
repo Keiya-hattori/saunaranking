@@ -1,6 +1,6 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from database.db import init_db, engine, Base
+from database.db import init_db, engine, get_db, Base
 from models.database import SaunaDB  # 明示的にインポート
 import logging
 from routers import sauna_ranking
@@ -9,11 +9,15 @@ from sqlalchemy import inspect
 from sqlalchemy.sql import text
 import time
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from services.scraper import SaunaScraper
+import crud
 
 # ロガーの設定
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# スクレイピングのインスタンス作成
+sauna_scraper = SaunaScraper()
 
 app = FastAPI()
 
@@ -30,15 +34,15 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     try:
-        logger.info("データベースの初期化を開始します")
-        # モデルを明示的にインポートした上でテーブル作成
-        Base.metadata.create_all(bind=engine)
-        logger.info("データベーステーブルの作成が完了しました")
+        logger.info("アプリケーション起動 - データベース初期化チェック")
+        inspector = inspect(engine)
+        if 'saunas' not in inspector.get_table_names():
+            logger.info("saunasテーブルが存在しないため作成します")
+            force_create_tables()
+        else:
+            logger.info("saunasテーブルは既に存在します")
     except Exception as e:
-        logger.error(f"データベースの初期化に失敗しました: {e}")
-        # エラー詳細をログに出力
-        import traceback
-        logger.error(traceback.format_exc())
+        logger.error(f"起動時の初期化でエラー: {e}")
 
 # サウナランキング関連のルーターを登録
 app.include_router(sauna_ranking.router)
@@ -141,7 +145,7 @@ async def run_github_action_scraping(db: Session = Depends(get_db)):
     GitHub Actionsから呼び出されるスクレイピング実行エンドポイント
     リトライロジックを含む
     """
-    max_retries = 1
+    max_retries = 3
     retry_delay = 5  # seconds
     
     for attempt in range(max_retries):
