@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 from datetime import datetime
+import time
 
 # FastAPI エンドポイントのURL
 API_BASE_URL = "https://saunaranking-ver2-fastapi.onrender.com"
@@ -53,19 +54,36 @@ st.markdown("""
 def get_sauna_ranking():
     """FastAPIエンドポイントからランキングデータを取得"""
     try:
+        # まずヘルスチェックを実行してサービスを起動
+        health_response = requests.get(f"{API_BASE_URL}/health")
+        if health_response.status_code != 200:
+            st.warning("APIサービスの起動中です。少々お待ちください...")
+            time.sleep(5)  # 5秒待機
+        
+        # ランキングデータを取得
         response = requests.get(f"{API_BASE_URL}/api/ranking")
-        response.raise_for_status()  # エラーレスポンスの場合は例外を発生
+        response.raise_for_status()
         
         # JSONデータをDataFrameに変換
         df = pd.DataFrame(response.json())
+        
+        if df.empty:
+            st.warning("ランキングデータがまだありません")
+            return df
         
         # last_updatedをdatetime型に変換
         df['last_updated'] = pd.to_datetime(df['last_updated'])
         
         return df
+        
     except requests.RequestException as e:
+        if "502" in str(e):
+            st.warning("APIサービスが起動中です。30秒後に自動的に再試行します...")
+            time.sleep(30)  # 30秒待機して再試行
+            return get_sauna_ranking()  # 再帰的に再試行
+        
         st.error(f"APIからのデータ取得に失敗しました: {str(e)}")
-        return pd.DataFrame()  # 空のDataFrame
+        return pd.DataFrame()
 
 def main():
     # タイトル

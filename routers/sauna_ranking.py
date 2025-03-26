@@ -5,8 +5,10 @@ from services.scraper import SaunaScraper
 from database.db import get_db
 from crud import bulk_upsert_saunas
 from models.database import ScrapingState, SaunaDB
-from typing import Dict
+from typing import Dict, List
 import logging
+from datetime import datetime
+from pydantic import BaseModel
 
 # ロガーの設定
 logger = logging.getLogger(__name__)
@@ -16,6 +18,16 @@ router = APIRouter()
 # スクレイパーのインスタンスをグローバルに作成
 # （リクエストごとに作成する必要はない）
 sauna_scraper = SaunaScraper()
+
+# ランキング用のレスポンスモデル
+class SaunaRanking(BaseModel):
+    name: str
+    url: str
+    review_count: int
+    last_updated: datetime
+
+    class Config:
+        from_attributes = True
 
 @router.get("/api/github-action-scraping")
 async def run_github_action_scraping(
@@ -119,3 +131,65 @@ async def reset_scraping_state(db: Session = Depends(get_db)):
             status_code=500,
             detail=f"Failed to reset scraping state: {str(e)}"
         )
+
+@router.get("/api/ranking", response_model=List[SaunaRanking])
+async def get_ranking(
+    limit: int = 50,
+    db: Session = Depends(get_db)
+):
+    """
+    サウナのランキングデータを取得するエンドポイント
+    
+    Args:
+        limit: 取得する上位件数（デフォルト50件）
+        db: データベースセッション
+    
+    Returns:
+        List[SaunaRanking]: ランキングデータのリスト
+    """
+    try:
+        # レビュー数の多い順にサウナを取得
+        saunas = db.query(SaunaDB)\
+            .order_by(SaunaDB.review_count.desc())\
+            .limit(limit)\
+            .all()
+        
+        if not saunas:
+            return []
+            
+        return [
+            SaunaRanking(
+                name=sauna.name,
+                url=sauna.url,
+                review_count=sauna.review_count,
+                last_updated=sauna.last_updated
+            ) for sauna in saunas
+        ]
+        
+    except Exception as e:
+        logger.error(f"ランキングデータの取得に失敗: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get ranking data: {str(e)}"
+        )
+
+# デバッグ用のエンドポイント
+@router.get("/api/ranking/debug")
+async def debug_ranking(db: Session = Depends(get_db)):
+    """ランキングデータの状態を確認するエンドポイント"""
+    try:
+        total_count = db.query(SaunaDB).count()
+        latest = db.query(SaunaDB)\
+            .order_by(SaunaDB.last_updated.desc())\
+            .first()
+        
+        return {
+            "total_saunas": total_count,
+            "latest_update": latest.last_updated if latest else None,
+            "database_status": "connected"
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "database_status": "error"
+        }
