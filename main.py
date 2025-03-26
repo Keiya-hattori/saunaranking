@@ -16,6 +16,9 @@ import crud
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# 🔇 SQLAlchemyのSQLログを抑制（ここを追加！）
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+
 # スクレイピングのインスタンス作成
 sauna_scraper = SaunaScraper()
 
