@@ -17,25 +17,46 @@ def force_create_tables():
             
             # 既存のテーブルを確認
             inspector = inspect(engine)
-            if 'saunas' in inspector.get_table_names():
-                logger.info("saunasテーブルは既に存在します")
-                return
+            existing_tables = inspector.get_table_names()
             
-            # SQLを直接実行してテーブルを作成
-            create_table_sql = """
-            CREATE TABLE IF NOT EXISTS saunas (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR NOT NULL,
-                url VARCHAR UNIQUE NOT NULL,
-                review_count INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            """
+            # saunasテーブルの作成
+            if 'saunas' not in existing_tables:
+                create_saunas_sql = """
+                CREATE TABLE IF NOT EXISTS saunas (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR NOT NULL,
+                    url VARCHAR UNIQUE NOT NULL,
+                    review_count INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                """
+                conn.execute(text(create_saunas_sql))
+                logger.info("saunasテーブルを作成しました")
+
+            # scraping_stateテーブルの作成
+            if 'scraping_state' not in existing_tables:
+                create_state_sql = """
+                CREATE TABLE IF NOT EXISTS scraping_state (
+                    id SERIAL PRIMARY KEY,
+                    key VARCHAR UNIQUE NOT NULL,
+                    value INTEGER NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                """
+                conn.execute(text(create_state_sql))
+                
+                # 初期データの挿入
+                init_state_sql = """
+                INSERT INTO scraping_state (key, value)
+                VALUES ('last_page', 1)
+                ON CONFLICT (key) DO NOTHING;
+                """
+                conn.execute(text(init_state_sql))
+                logger.info("scraping_stateテーブルを作成し、初期データを挿入しました")
             
-            conn.execute(text(create_table_sql))
             conn.commit()
-            logger.info("saunasテーブルを強制的に作成しました")
+            logger.info("全てのテーブル作成が完了しました")
             
     except Exception as e:
         logger.error(f"テーブル作成中にエラーが発生: {e}")
