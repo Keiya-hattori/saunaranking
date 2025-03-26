@@ -1,7 +1,10 @@
 import streamlit as st
-import sqlite3
-from pathlib import Path
 import pandas as pd
+import requests
+from datetime import datetime
+
+# FastAPI エンドポイントのURL
+API_BASE_URL = "https://saunaranking-ver2-fastapi.onrender.com"
 
 # ページ設定
 st.set_page_config(
@@ -30,37 +33,39 @@ st.markdown("""
         font-size: 0.9rem;
         font-style: italic;
     }
+    .ranking-table {
+        width: 100%;
+        margin-top: 2rem;
+    }
+    .ranking-table th {
+        background-color: #FF4B4B;
+        color: white;
+        padding: 1rem;
+    }
+    .ranking-table td {
+        padding: 1rem;
+        border-bottom: 1px solid #ddd;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-def get_db_connection():
-    # ✅ プロジェクトルート（app.pyの親の親）を基準にする
-    BASE_DIR = Path(__file__).resolve().parent.parent
-    DB_PATH = BASE_DIR / "data" / "saunas.db"
-
-    if not DB_PATH.exists():
-        st.error("データベースファイルが見つかりません！")
-        st.stop()
-
-    return sqlite3.connect(DB_PATH)
-
+@st.cache_data(ttl=600)  # 10分間キャッシュ
 def get_sauna_ranking():
-    """サウナランキングデータを取得"""
-    conn = get_db_connection()
-    query = """
-    SELECT 
-        name,
-        url,
-        review_count,
-        last_updated
-    FROM saunas 
-    ORDER BY review_count DESC 
-    LIMIT 50
-    """
-    
-    df = pd.read_sql_query(query, conn)
-    conn.close()
-    return df
+    """FastAPIエンドポイントからランキングデータを取得"""
+    try:
+        response = requests.get(f"{API_BASE_URL}/api/ranking")
+        response.raise_for_status()  # エラーレスポンスの場合は例外を発生
+        
+        # JSONデータをDataFrameに変換
+        df = pd.DataFrame(response.json())
+        
+        # last_updatedをdatetime型に変換
+        df['last_updated'] = pd.to_datetime(df['last_updated'])
+        
+        return df
+    except requests.RequestException as e:
+        st.error(f"APIからのデータ取得に失敗しました: {str(e)}")
+        return pd.DataFrame()  # 空のDataFrame
 
 def main():
     # タイトル
@@ -74,18 +79,21 @@ def main():
     
     try:
         # ランキングデータ取得
-        df = get_sauna_ranking()
+        with st.spinner("ランキングデータを取得中..."):
+            df = get_sauna_ranking()
         
         if df.empty:
             st.warning("ランキングデータがありません。")
             return
         
-        # 最終更新日時を表示
+        # 最終更新日時を表示（日本時間に変換して表示）
         last_updated = df['last_updated'].max()
-        st.markdown(
-            f'<p class="last-updated">最終更新: {last_updated}</p>',
-            unsafe_allow_html=True
-        )
+        if last_updated:
+            formatted_date = last_updated.strftime('%Y年%m月%d日 %H:%M')
+            st.markdown(
+                f'<p class="last-updated">最終更新: {formatted_date}</p>',
+                unsafe_allow_html=True
+            )
         
         # ランキング表示用にデータを加工
         df['rank'] = range(1, len(df) + 1)
@@ -118,12 +126,12 @@ def main():
         ### 📝 このランキングについて
         
         - 「穴場」というキーワードを含むレビューの数を集計しています
-        - データは定期的に更新されます（GitHub Actions による自動収集）
+        - データは15分ごとに更新されます（GitHub Actions による自動収集）
         - サウナ名をクリックすると、サウナイキタイの詳細ページが開きます
         """)
         
     except Exception as e:
-        st.error(f"データの取得中にエラーが発生しました: {str(e)}")
+        st.error(f"データの表示中にエラーが発生しました: {str(e)}")
 
 if __name__ == "__main__":
     main() 
