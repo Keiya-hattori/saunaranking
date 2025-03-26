@@ -12,4 +12,13 @@ class SaunaDB(Base):
     url = Column(String, unique=True, index=True)
     review_count = Column(Integer, default=0)
     created_at = Column(DateTime, server_default=func.now())
-    last_updated = Column(DateTime, server_default=func.now(), onupdate=func.now()) 
+    last_updated = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+class ScrapingState(Base):
+    """スクレイピングの状態を保存するモデル"""
+    __tablename__ = "scraping_state"
+
+    id = Column(Integer, primary_key=True)
+    key = Column(String, unique=True, nullable=False)  # 例: "last_page"
+    value = Column(Integer, nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now()) 

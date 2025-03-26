@@ -7,8 +7,10 @@ from urllib.parse import urljoin
 import logging
 import time
 import os
-from pathlib import Path
 from collections import defaultdict
+from sqlalchemy.orm import Session
+from models.database import ScrapingState
+from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 
@@ -17,13 +19,10 @@ class SaunaScraper:
         self.base_url = "https://sauna-ikitai.com"
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-        }
-        # 設定ファイルのパスを指定
-        self.last_page_file = Path("data/last_page.txt")
-        self.last_page_file.parent.mkdir(parents=True, exist_ok=True)
-        
+        }        
         # ページ間の待機時間（秒）
         self.wait_time = 3
+        self.DEFAULT_START_PAGE = 1
 
     def _get_page_content(self, url: str) -> BeautifulSoup:
         """指定URLのページコンテンツを取得してBeautifulSoupオブジェクトを返す"""
@@ -142,25 +141,43 @@ class SaunaScraper:
         """ページ番号からURLを生成"""
         return f"{self.base_url}/posts?keyword=穴場&page={page}&prefecture[0]=tokyo"
 
-    def load_last_scraped_page(self) -> int:
-        """前回スクレイピングした最後のページ番号を読み込む"""
+    def load_last_scraped_page(self, db: Session) -> int:
+        """データベースから最後にスクレイピングしたページ番号を読み込む"""
         try:
-            if self.last_page_file.exists():
-                with open(self.last_page_file, "r") as f:
-                    return int(f.read().strip())
-            return 1
+            stmt = select(ScrapingState).where(ScrapingState.key == "last_page")
+            result = db.execute(stmt).scalar_one_or_none()
+            
+            if result is None:
+                # 初回実行時は新しいレコードを作成
+                state = ScrapingState(key="last_page", value=self.DEFAULT_START_PAGE)
+                db.add(state)
+                db.commit()
+                return self.DEFAULT_START_PAGE
+                
+            return result.value
+            
         except Exception as e:
             logger.error(f"前回のページ情報の読み込みに失敗しました: {e}")
-            return 1
+            return self.DEFAULT_START_PAGE
 
-    def save_last_scraped_page(self, page: int) -> None:
-        """次回のスタートページ番号を保存"""
+    def save_last_scraped_page(self, db: Session, page: int) -> None:
+        """次回のスタートページ番号をデータベースに保存"""
         try:
-            with open(self.last_page_file, "w") as f:
-                f.write(str(page))
+            stmt = select(ScrapingState).where(ScrapingState.key == "last_page")
+            state = db.execute(stmt).scalar_one_or_none()
+            
+            if state:
+                state.value = page
+            else:
+                state = ScrapingState(key="last_page", value=page)
+                db.add(state)
+                
+            db.commit()
             logger.info(f"次回の開始ページ（{page}）を保存しました")
+            
         except Exception as e:
             logger.error(f"ページ情報の保存に失敗しました: {e}")
+            db.rollback()
 
     def scrape_multiple_pages(self, start_page: int, num_pages: int = 1) -> List[SaunaBase]:
         """
@@ -194,29 +211,19 @@ class SaunaScraper:
 
         return all_saunas
 
-    def run_scheduled_scraping(self, num_pages: int = 3) -> List[SaunaBase]:
+    def run_scheduled_scraping(self, db: Session, num_pages: int = 3) -> List[SaunaBase]:
         """
         前回の続きから指定ページ数分のスクレイピングを実行
-
-        Args:
-            num_pages: スクレイピングするページ数（デフォルト3）
-
-        Returns:
-            List[SaunaBase]: 収集したサウナ情報のリスト
         """
-        # 前回の続きのページを読み込む
-        start_page = self.load_last_scraped_page()
+        # 前回の続きのページをDBから読み込む
+        start_page = self.load_last_scraped_page(db)
         logger.info(f"ページ {start_page} からスクレイピングを開始します")
 
         # スクレイピングを実行
         saunas = self.scrape_multiple_pages(start_page, num_pages)
-        print(f"取得したサウナ数: {len(saunas)}") 
-
-        aggregated_saunas = self.aggregate_saunas(saunas)
-        print(f"集約後サウナ数: {len(aggregated_saunas)}")
 
         # 次回の開始ページを保存
         next_start_page = start_page + num_pages
-        self.save_last_scraped_page(next_start_page)
+        self.save_last_scraped_page(db, next_start_page)
 
         return saunas 
