@@ -193,3 +193,31 @@ async def debug_ranking(db: Session = Depends(get_db)):
             "error": str(e),
             "database_status": "error"
         }
+
+@router.post("/api/reset-database")
+async def reset_database(db: Session = Depends(get_db)):
+    """データベースをリセットするエンドポイント（開発用）"""
+    try:
+        # 既存のデータを全て削除
+        db.query(SaunaDB).delete()
+        db.query(ScrapingState).delete()
+        
+        # スクレイピング状態を初期化
+        initial_state = ScrapingState(key="last_page", value=1)
+        db.add(initial_state)
+        
+        db.commit()
+        
+        return {
+            "message": "データベースを正常にリセットしました",
+            "status": "success",
+            "saunas_count": db.query(SaunaDB).count(),
+            "next_page": 1
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"データベースリセット中にエラー: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to reset database: {str(e)}"
+        )
