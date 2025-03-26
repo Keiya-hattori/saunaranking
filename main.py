@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from database.db import init_db, engine, Base
 from models.database import SaunaDB  # 明示的にインポート
@@ -7,6 +7,9 @@ from routers import sauna_ranking
 from force_create_tables import force_create_tables
 from sqlalchemy import inspect
 from sqlalchemy.sql import text
+import time
+from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 # ロガーの設定
 logging.basicConfig(level=logging.INFO)
@@ -99,4 +102,74 @@ async def debug_database():
         return {
             "error": str(e),
             "traceback": traceback.format_exc()
-        } 
+        }
+
+@app.get("/health")
+async def health_check():
+    """
+    サービスの健康状態をチェックするエンドポイント
+    データベース接続も確認する
+    """
+    try:
+        # データベース接続チェック
+        with engine.connect() as conn:
+            # 簡単なクエリを実行
+            result = conn.execute(text("SELECT 1")).scalar()
+            
+            # テーブルの存在確認
+            inspector = inspect(engine)
+            tables = inspector.get_table_names()
+            
+            return {
+                "status": "healthy",
+                "database": "connected",
+                "tables": tables,
+                "timestamp": time.time()
+            }
+            
+    except Exception as e:
+        logger.error(f"ヘルスチェックエラー: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Service unhealthy: {str(e)}"
+        )
+
+# スクレイピングエンドポイントにリトライロジックを追加
+@app.get("/api/github-action-scraping")
+async def run_github_action_scraping(db: Session = Depends(get_db)):
+    """
+    GitHub Actionsから呼び出されるスクレイピング実行エンドポイント
+    リトライロジックを含む
+    """
+    max_retries = 1
+    retry_delay = 5  # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            # テーブルの存在確認
+            inspector = inspect(engine)
+            if 'saunas' not in inspector.get_table_names():
+                logger.info("saunasテーブルが存在しないため作成します")
+                force_create_tables()
+            
+            # スクレイピングを実行
+            scraped_saunas = sauna_scraper.run_scheduled_scraping()
+            
+            # DBに保存
+            saved_saunas = crud.bulk_upsert_saunas(db, scraped_saunas)
+            
+            return {
+                "message": "Scraping and DB update completed successfully",
+                "count": len(saved_saunas)
+            }
+            
+        except Exception as e:
+            logger.error(f"試行 {attempt + 1}/{max_retries} 失敗: {e}")
+            if attempt < max_retries - 1:
+                logger.info(f"{retry_delay}秒後にリトライします...")
+                time.sleep(retry_delay)
+                continue
+            raise HTTPException(
+                status_code=500,
+                detail=f"All retry attempts failed: {str(e)}"
+            ) 

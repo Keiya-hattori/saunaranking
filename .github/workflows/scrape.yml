@@ -9,6 +9,30 @@ jobs:
   scraping:
     runs-on: ubuntu-latest
     steps:
-      - name: Call FastAPI Endpoint
+      - name: Wake up Render service and run scraping
         run: |
-          curl -X GET https://sauna-fastapi.onrender.com/api/github-action-scraping
+          # 1. まずサービスを起こす
+          echo "Waking up the service..."
+          curl -s https://saunaranking-ver2-fastapi.onrender.com/health
+          
+          # 2. サービスの起動を待つ（30秒）
+          echo "Waiting for service to wake up..."
+          sleep 30
+          
+          # 3. スクレイピングを実行
+          echo "Starting scraping..."
+          response=$(curl -s -w "\n%{http_code}" https://saunaranking-ver2-fastapi.onrender.com/api/github-action-scraping)
+          
+          # レスポンスからステータスコードと本文を分離
+          status_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          # 結果を出力
+          echo "Status code: $status_code"
+          echo "Response body: $body"
+          
+          # エラーチェック
+          if [ "$status_code" -ne 200 ]; then
+            echo "Error: Scraping failed"
+            exit 1
+          fi
