@@ -1,0 +1,14 @@
+name: Scheduled Sauna Scraping
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"  # 毎15分
+  workflow_dispatch:
+    
+jobs:
+  scraping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call FastAPI Endpoint
+        run: |
+          curl -X GET https://sauna-fastapi.onrender.com/api/github-action-scraping
