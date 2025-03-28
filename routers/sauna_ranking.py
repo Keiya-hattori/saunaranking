@@ -3,8 +3,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 from services.scraper import SaunaScraper
 from database.db import get_db
-from crud import bulk_upsert_saunas
-from models.database import ScrapingState, SaunaDB
+from crud import bulk_upsert_saunas, get_sauna_ranking
+from models.database import ScrapingState, SaunaDB, SaunaKashikiriDB
+from models.sauna import SaunaRanking, SaunaRankingKashikiri
 from typing import Dict, List
 import logging
 from datetime import datetime
@@ -221,3 +222,77 @@ async def reset_database(db: Session = Depends(get_db)):
             status_code=500,
             detail=f"Failed to reset database: {str(e)}"
         )
+
+# ---- 穴場関連のエンドポイント ----
+
+@router.get("/api/github-action-scraping")
+async def run_github_action_scraping(db: Session = Depends(get_db)) -> Dict:
+    """穴場キーワードのスクレイピングを実行"""
+    try:
+        scraped_saunas = sauna_scraper.run_scheduled_scraping(
+            db, 
+            num_pages=1,
+            keyword="穴場",
+            key_prefix="last_page"
+        )
+        
+        saved_saunas = bulk_upsert_saunas(db, scraped_saunas, SaunaDB)
+        
+        return {
+            "message": "穴場キーワードのスクレイピングが完了しました",
+            "count": len(saved_saunas)
+        }
+        
+    except Exception as e:
+        logger.error(f"スクレイピング失敗: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Scraping failed: {str(e)}"
+        )
+
+@router.get("/api/ranking", response_model=List[SaunaRanking])
+async def get_ranking(
+    limit: int = 50,
+    db: Session = Depends(get_db)
+):
+    """穴場サウナのランキングデータを取得"""
+    return get_sauna_ranking(db, limit, SaunaDB)
+
+# ---- 貸切関連のエンドポイント ----
+
+@router.get("/api/github-action-kashikiri")
+async def run_github_action_kashikiri(db: Session = Depends(get_db)) -> Dict:
+    """貸切キーワードのスクレイピングを実行"""
+    try:
+        scraped_saunas = sauna_scraper.run_scheduled_scraping(
+            db, 
+            num_pages=1,
+            keyword="貸切",
+            key_prefix="last_page_kashikiri"
+        )
+        
+        # HttpUrlを文字列に変換
+        for sauna in scraped_saunas:
+            sauna.url = str(sauna.url)
+        
+        saved_saunas = bulk_upsert_saunas(db, scraped_saunas, SaunaKashikiriDB)
+        
+        return {
+            "message": "貸切キーワードのスクレイピングが完了しました",
+            "count": len(saved_saunas)
+        }
+        
+    except Exception as e:
+        logger.error(f"貸切スクレイピング失敗: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Kashikiri scraping failed: {str(e)}"
+        )
+
+@router.get("/api/ranking/kashikiri", response_model=List[SaunaRankingKashikiri])
+async def get_kashikiri_ranking(
+    limit: int = 50,
+    db: Session = Depends(get_db)
+):
+    """貸切サウナのランキングデータを取得"""
+    return get_sauna_ranking(db, limit, SaunaKashikiriDB)

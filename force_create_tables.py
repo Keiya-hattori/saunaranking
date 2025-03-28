@@ -34,6 +34,21 @@ def force_create_tables():
                 conn.execute(text(create_saunas_sql))
                 logger.info("saunasテーブルを作成しました")
 
+            # saunas_kashikiriテーブルの作成
+            if 'saunas_kashikiri' not in existing_tables:
+                create_kashikiri_sql = """
+                CREATE TABLE IF NOT EXISTS saunas_kashikiri (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR NOT NULL,
+                    url VARCHAR UNIQUE NOT NULL,
+                    review_count INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                """
+                conn.execute(text(create_kashikiri_sql))
+                logger.info("saunas_kashikiriテーブルを作成しました")
+
             # scraping_stateテーブルの作成
             if 'scraping_state' not in existing_tables:
                 create_state_sql = """
@@ -49,7 +64,9 @@ def force_create_tables():
                 # 初期データの挿入
                 init_state_sql = """
                 INSERT INTO scraping_state (key, value)
-                VALUES ('last_page', 1)
+                VALUES 
+                    ('last_page', 1),
+                    ('last_page_kashikiri', 1)
                 ON CONFLICT (key) DO NOTHING;
                 """
                 conn.execute(text(init_state_sql))

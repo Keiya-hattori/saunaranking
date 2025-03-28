@@ -9,31 +9,48 @@ jobs:
   scraping:
     runs-on: ubuntu-latest
     steps:
-      - name: Wake up Render service and run scraping
+      - name: Wake up Render service
         run: |
-          # 1. まずサービスを起こす
           echo "Waking up the service..."
           curl -s https://saunaranking-ver2-fastapi.onrender.com/health
           
-          # 2. サービスの起動を待つ（30秒）
           echo "Waiting for service to wake up..."
           sleep 30
           
-          # 3. スクレイピングを実行
-          echo "Starting scraping..."
+      - name: Run 穴場 Scraping
+        run: |
+          echo "Starting 穴場 scraping..."
           response=$(curl -s -w "\n%{http_code}" https://saunaranking-ver2-fastapi.onrender.com/api/github-action-scraping)
           
           # レスポンスからステータスコードと本文を分離
           status_code=$(echo "$response" | tail -n1)
           body=$(echo "$response" | sed '$d')
           
-          # 結果を出力
           echo "Status code: $status_code"
           echo "Response body: $body"
           
-          # エラーチェック
           if [ "$status_code" -ne 200 ]; then
-            echo "Error: Scraping failed"
+            echo "Error: 穴場 Scraping failed"
+            # 続行するためにexitしない
+          fi
+          
+          # スクレイピング間隔を空ける
+          sleep 10
+          
+      - name: Run 貸切 Scraping
+        run: |
+          echo "Starting 貸切 scraping..."
+          response=$(curl -s -w "\n%{http_code}" https://saunaranking-ver2-fastapi.onrender.com/api/github-action-kashikiri)
+          
+          # レスポンスからステータスコードと本文を分離
+          status_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          echo "Status code: $status_code"
+          echo "Response body: $body"
+          
+          if [ "$status_code" -ne 200 ]; then
+            echo "Error: 貸切 Scraping failed"
             exit 1
           fi
 
