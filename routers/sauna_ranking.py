@@ -5,7 +5,7 @@ from services.scraper import SaunaScraper
 from database.db import get_db
 from crud import bulk_upsert_saunas, get_sauna_ranking
 from models.database import ScrapingState, SaunaDB, SaunaKashikiriDB
-from models.sauna import SaunaRanking, SaunaRankingKashikiri
+from models.sauna import SaunaRanking, SaunaRankingKashikiri, SaunaBase
 from typing import Dict, List
 import logging
 from datetime import datetime
@@ -276,10 +276,13 @@ async def run_github_action_kashikiri(
             key_prefix="last_page_kashikiri"
         )
         
+        # ここで変数の初期化が必要
+        converted_saunas = []
+        
         for sauna in scraped_saunas:
             converted = SaunaBase(
                 name=sauna.name,
-                url=str(sauna.url),  # 明示的に文字列に変換
+                url=str(sauna.url),
                 review_count=sauna.review_count,
                 last_updated=sauna.last_updated
             )
