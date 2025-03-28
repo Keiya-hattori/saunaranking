@@ -46,8 +46,11 @@ def bulk_upsert_saunas(db: Session, saunas: List[SaunaBase], db_model: Type[Any]
         updated_saunas = []
         
         for sauna in saunas:
-            # 既存のレコードを検索
-            stmt = select(db_model).where(db_model.url == sauna.url)
+            # HttpUrl型を文字列に変換
+            url_str = str(sauna.url)
+            
+            # 既存のレコードを検索（文字列で検索）
+            stmt = select(db_model).where(db_model.url == url_str)
             existing = db.execute(stmt).scalar_one_or_none()
             
             if existing:
@@ -56,10 +59,10 @@ def bulk_upsert_saunas(db: Session, saunas: List[SaunaBase], db_model: Type[Any]
                 existing.last_updated = sauna.last_updated
                 db_sauna = existing
             else:
-                # 新規レコードの作成
+                # 新規レコードの作成（文字列としてURLを保存）
                 db_sauna = db_model(
                     name=sauna.name,
-                    url=sauna.url,
+                    url=url_str,  # 文字列に変換
                     review_count=sauna.review_count,
                     last_updated=sauna.last_updated
                 )

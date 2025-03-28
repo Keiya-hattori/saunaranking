@@ -271,6 +271,10 @@ async def run_github_action_kashikiri(db: Session = Depends(get_db)) -> Dict:
             key_prefix="last_page_kashikiri"
         )
         
+        # HttpUrlを文字列に変換
+        for sauna in scraped_saunas:
+            sauna.url = str(sauna.url)
+        
         saved_saunas = bulk_upsert_saunas(db, scraped_saunas, SaunaKashikiriDB)
         
         return {

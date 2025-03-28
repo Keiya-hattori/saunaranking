@@ -4,22 +4,21 @@ import requests
 import time
 import os
 
-# FastAPI エンドポイントのURL
-API_BASE_URL = os.environ.get(
-    "API_BASE_URL", 
-    "https://saunaranking-ver2-fastapi.onrender.com"  # ← FastAPIサービスのURLを入れる
-)
-
-# デバッグ用（任意）
-import streamlit as st
-st.sidebar.write(f"API URL: {API_BASE_URL}")
-
-# ページ設定
+# ページ設定は最初に行う必要があります
 st.set_page_config(
     page_title="サウナランキング",
     page_icon="🧖",
     layout="centered"
 )
+
+# FastAPI エンドポイントのURL設定（ページ設定の後に実行）
+API_BASE_URL = os.environ.get(
+    "API_BASE_URL", 
+    "https://saunaranking-ver2-fastapi.onrender.com"
+)
+
+# デバッグ情報（サイドバーに表示）
+st.sidebar.write(f"API URL: {API_BASE_URL}")
 
 # CSSでスタイルを調整
 st.markdown("""

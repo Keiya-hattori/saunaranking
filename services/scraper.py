@@ -45,15 +45,7 @@ class SaunaScraper:
             raise
     
     def scrape_sauna_reviews(self, target_url: str = None) -> List[SaunaBase]:
-        """
-        「穴場」キーワードを含むレビューページから、サウナ情報をスクレイピング
-
-        Args:
-            target_url: スクレイピング対象のURL（Noneの場合はself.base_urlを使用）
-
-        Returns:
-            List[SaunaBase]: サウナ情報のリスト
-        """
+        """キーワードを含むレビューページから、サウナ情報をスクレイピング"""
         saunas = []
         url_to_scrape = target_url or self.base_url
         soup = self._get_page_content(url_to_scrape)
@@ -72,7 +64,7 @@ class SaunaScraper:
                         name = name_link_element.text.strip()
                         url = name_link_element.get("href")
                         
-                        # URLが相対パスでなく完全URLになっているならそのまま使う
+                        # URLが完全URLの場合はそのまま、相対パスの場合はベースURLと結合
                         full_url = url if url.startswith("http") else urljoin(self.base_url, url)
 
                         # 各レビュー = 1カウントとして扱う
@@ -80,7 +72,7 @@ class SaunaScraper:
 
                         sauna = SaunaBase(
                             name=name,
-                            url=full_url,
+                            url=str(full_url),  # 文字列として保存
                             review_count=review_count,
                             last_updated=datetime.now()
                         )
