@@ -5,7 +5,14 @@ import time
 import os
 
 # FastAPI エンドポイントのURL
-API_BASE_URL = ""  # 空文字は現在のホストを使用
+API_BASE_URL = os.environ.get(
+    "API_BASE_URL", 
+    "https://saunaranking-ver2-fastapi.onrender.com"  # ← FastAPIサービスのURLを入れる
+)
+
+# デバッグ用（任意）
+import streamlit as st
+st.sidebar.write(f"API URL: {API_BASE_URL}")
 
 # ページ設定
 st.set_page_config(
