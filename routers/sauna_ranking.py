@@ -261,32 +261,57 @@ async def get_ranking(
 # ---- 貸切関連のエンドポイント ----
 
 @router.get("/api/github-action-kashikiri")
-async def run_github_action_kashikiri(db: Session = Depends(get_db)) -> Dict:
-    """貸切キーワードのスクレイピングを実行"""
+async def run_github_action_kashikiri(
+    db: Session = Depends(get_db)
+) -> Dict:
+    """
+    GitHub Actionsから呼び出される貸切キーワードのスクレイピング実行とDB保存を行うエンドポイント
+    """
     try:
+        # スクレイピングを実行
         scraped_saunas = sauna_scraper.run_scheduled_scraping(
             db, 
-            num_pages=1,
+            num_pages=3,
             keyword="貸切",
             key_prefix="last_page_kashikiri"
         )
         
-        # HttpUrlを文字列に変換
         for sauna in scraped_saunas:
-            sauna.url = str(sauna.url)
+            converted = SaunaBase(
+                name=sauna.name,
+                url=str(sauna.url),  # 明示的に文字列に変換
+                review_count=sauna.review_count,
+                last_updated=sauna.last_updated
+            )
+            converted_saunas.append(converted)
         
-        saved_saunas = bulk_upsert_saunas(db, scraped_saunas, SaunaKashikiriDB)
-        
-        return {
-            "message": "貸切キーワードのスクレイピングが完了しました",
-            "count": len(saved_saunas)
-        }
-        
-    except Exception as e:
-        logger.error(f"貸切スクレイピング失敗: {e}")
+        # DBに保存
+        try:
+            saved_saunas = bulk_upsert_saunas(db, converted_saunas, SaunaKashikiriDB)
+            
+            # 現在のスクレイピング状態を取得
+            stmt = select(ScrapingState).where(ScrapingState.key == "last_page_kashikiri")
+            state = db.execute(stmt).scalar_one_or_none()
+            
+            # 成功レスポンスを返す
+            return {
+                "message": "Kashikiri scraping and DB update completed successfully",
+                "count": len(saved_saunas),
+                "current_page": state.value if state else 1
+            }
+            
+        except Exception as db_error:
+            logger.error(f"Kashikiri database operation failed: {str(db_error)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Kashikiri database operation failed: {str(db_error)}"
+            )
+            
+    except Exception as scraping_error:
+        logger.error(f"Kashikiri scraping failed: {str(scraping_error)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Kashikiri scraping failed: {str(e)}"
+            detail=f"Kashikiri scraping failed: {str(scraping_error)}"
         )
 
 @router.get("/api/ranking/kashikiri", response_model=List[SaunaRankingKashikiri])
