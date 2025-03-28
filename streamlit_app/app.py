@@ -1,15 +1,15 @@
 import streamlit as st
 import pandas as pd
 import requests
-from datetime import datetime
 import time
+import os
 
 # FastAPI エンドポイントのURL
-API_BASE_URL = "https://saunaranking-ver2-fastapi.onrender.com"
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
 # ページ設定
 st.set_page_config(
-    page_title="穴場サウナランキング",
+    page_title="サウナランキング",
     page_icon="🧖",
     layout="centered"
 )
@@ -19,9 +19,6 @@ st.markdown("""
 <style>
     .main {
         padding: 2rem;
-    }
-    .stDataFrame {
-        font-size: 1.2rem;
     }
     .sauna-title {
         color: #FF4B4B;
@@ -50,106 +47,111 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-#@st.cache_data(ttl=660)  # 2分間キャッシュ
-def get_sauna_ranking():
+@st.cache_data(ttl=600)  # 10分間キャッシュ
+def get_sauna_ranking(endpoint="/api/ranking"):
     """FastAPIエンドポイントからランキングデータを取得"""
     try:
-        # まずヘルスチェックを実行してサービスを起動
-        health_response = requests.get(f"{API_BASE_URL}/health",timeout=5)
-        if health_response.status_code != 200:
-            st.warning("APIサービスの起動中です。少々お待ちください...")
-            time.sleep(5)  # 5秒待機
-        
-        # ランキングデータを取得
-        response = requests.get(f"{API_BASE_URL}/api/ranking",timeout=10)
+        response = requests.get(f"{API_BASE_URL}{endpoint}")
         response.raise_for_status()
         
         # JSONデータをDataFrameに変換
         df = pd.DataFrame(response.json())
         
         if df.empty:
-            st.warning("ランキングデータがまだありません")
             return df
         
         # last_updatedをdatetime型に変換
         df['last_updated'] = pd.to_datetime(df['last_updated'])
         
         return df
-        
     except requests.RequestException as e:
-        if "502" in str(e):
-            st.warning("APIサービスが起動中です。30秒後に自動的に再試行します...")
-            time.sleep(30)  # 30秒待機して再試行
-            return get_sauna_ranking()  # 再帰的に再試行
-        
         st.error(f"APIからのデータ取得に失敗しました: {str(e)}")
         return pd.DataFrame()
 
-def main():
-    # タイトル
-    st.markdown('<p class="sauna-title">🧖 穴場サウナランキング</p>', unsafe_allow_html=True)
+def display_ranking(df, title):
+    """ランキングを表示する関数"""
+    if df.empty:
+        st.warning(f"{title}のデータがありません。")
+        return
     
-    # サブタイトル
-    st.markdown("""
-    サウナイキタイのレビューから「穴場」と評価されているサウナをランキング形式で紹介します。
-    各サウナ名をクリックすると、サウナイキタイの詳細ページに移動できます。
-    """)
-    
-    try:
-        # ランキングデータ取得
-        with st.spinner("ランキングデータを取得中..."):
-            df = get_sauna_ranking()
-        
-        if df.empty:
-            st.warning("ランキングデータがありません。")
-            return
-        
-        # 最終更新日時を表示（日本時間に変換して表示）
-        last_updated = df['last_updated'].max()
-        if last_updated:
-            formatted_date = last_updated.strftime('%Y年%m月%d日 %H:%M')
-            st.markdown(
-                f'<p class="last-updated">最終更新: {formatted_date}</p>',
-                unsafe_allow_html=True
-            )
-        
-        # ランキング表示用にデータを加工
-        df['rank'] = range(1, len(df) + 1)
-        df['name_with_link'] = df.apply(
-            lambda x: f'<a href="{x["url"]}" target="_blank">{x["name"]}</a>',
-            axis=1
-        )
-        
-        # 表示用のデータフレームを作成
-        display_df = pd.DataFrame({
-            '順位': df['rank'],
-            'サウナ施設': df['name_with_link'],
-            '穴場レビュー数': df['review_count']
-        })
-        
-        # ランキング表示
-        st.write(
-            display_df.to_html(
-                escape=False,
-                index=False,
-                classes=['ranking-table'],
-                justify='center'
-            ),
+    # 最終更新日時を表示
+    last_updated = df['last_updated'].max()
+    if last_updated:
+        formatted_date = last_updated.strftime('%Y年%m月%d日 %H:%M')
+        st.markdown(
+            f'<p class="last-updated">最終更新: {formatted_date}</p>',
             unsafe_allow_html=True
         )
-        
-        # 補足情報
+    
+    # ランキング表示用にデータを加工
+    df['rank'] = range(1, len(df) + 1)
+    df['name_with_link'] = df.apply(
+        lambda x: f'<a href="{x["url"]}" target="_blank">{x["name"]}</a>',
+        axis=1
+    )
+    
+    # 表示用のデータフレームを作成
+    display_df = pd.DataFrame({
+        '順位': df['rank'],
+        'サウナ施設': df['name_with_link'],
+        'レビュー数': df['review_count']
+    })
+    
+    # ランキング表示
+    st.write(
+        display_df.to_html(
+            escape=False,
+            index=False,
+            classes=['ranking-table'],
+            justify='center'
+        ),
+        unsafe_allow_html=True
+    )
+
+def main():
+    # タイトル
+    st.markdown('<p class="sauna-title">🧖 サウナランキング</p>', unsafe_allow_html=True)
+    
+    # タブを作成
+    tab1, tab2 = st.tabs(["穴場サウナ", "貸切サウナ"])
+    
+    with tab1:
+        st.header("穴場サウナランキング")
         st.markdown("""
-        ---
-        ### 📝 このランキングについて
-        
-        - 「穴場」というキーワードを含むレビューの数を集計しています
-        - データは15分ごとに更新されます（GitHub Actions による自動収集）
-        - サウナ名をクリックすると、サウナイキタイの詳細ページが開きます
+        サウナイキタイのレビューから「穴場」と評価されているサウナをランキング形式で紹介します。
+        各サウナ名をクリックすると、サウナイキタイの詳細ページに移動できます。
         """)
         
-    except Exception as e:
-        st.error(f"データの表示中にエラーが発生しました: {str(e)}")
+        try:
+            with st.spinner("穴場サウナのデータを取得中..."):
+                df = get_sauna_ranking("/api/ranking")
+            display_ranking(df, "穴場サウナ")
+        except Exception as e:
+            st.error(f"穴場サウナの表示中にエラーが発生しました: {str(e)}")
+    
+    with tab2:
+        st.header("貸切サウナランキング")
+        st.markdown("""
+        サウナイキタイのレビューから「貸切」と評価されているサウナをランキング形式で紹介します。
+        各サウナ名をクリックすると、サウナイキタイの詳細ページに移動できます。
+        """)
+        
+        try:
+            with st.spinner("貸切サウナのデータを取得中..."):
+                df = get_sauna_ranking("/api/ranking/kashikiri")
+            display_ranking(df, "貸切サウナ")
+        except Exception as e:
+            st.error(f"貸切サウナの表示中にエラーが発生しました: {str(e)}")
+    
+    # 補足情報
+    st.markdown("""
+    ---
+    ### 📝 このランキングについて
+    
+    - 「穴場」「貸切」というキーワードを含むレビューの数を集計しています
+    - データは15分ごとに更新されます（GitHub Actions による自動収集）
+    - サウナ名をクリックすると、サウナイキタイの詳細ページが開きます
+    """)
 
 if __name__ == "__main__":
     main() 

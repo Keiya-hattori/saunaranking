@@ -1,8 +1,8 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, select
-from typing import List, Optional
+from typing import List, Optional, Type, Any
 from datetime import datetime
-from models.database import SaunaDB
+from models.database import SaunaDB, SaunaKashikiriDB
 from models.sauna import SaunaBase
 import logging
 
@@ -30,16 +30,24 @@ def upsert_sauna(db: Session, sauna: SaunaBase) -> SaunaDB:
     return db_sauna
 
 
-def bulk_upsert_saunas(db: Session, saunas: List[SaunaBase]) -> List[SaunaDB]:
+def bulk_upsert_saunas(db: Session, saunas: List[SaunaBase], db_model: Type[Any] = SaunaDB) -> List[Any]:
     """
     複数のサウナ情報をまとめて追加または更新
+    
+    Args:
+        db: データベースセッション
+        saunas: 保存するサウナ情報のリスト
+        db_model: 保存先のモデルクラス（デフォルトはSaunaDB）
+        
+    Returns:
+        List: 保存されたレコードのリスト
     """
     try:
         updated_saunas = []
         
         for sauna in saunas:
-            # UPSERT処理（merge使用）
-            stmt = select(SaunaDB).where(SaunaDB.url == sauna.url)
+            # 既存のレコードを検索
+            stmt = select(db_model).where(db_model.url == sauna.url)
             existing = db.execute(stmt).scalar_one_or_none()
             
             if existing:
@@ -49,7 +57,7 @@ def bulk_upsert_saunas(db: Session, saunas: List[SaunaBase]) -> List[SaunaDB]:
                 db_sauna = existing
             else:
                 # 新規レコードの作成
-                db_sauna = SaunaDB(
+                db_sauna = db_model(
                     name=sauna.name,
                     url=sauna.url,
                     review_count=sauna.review_count,
@@ -58,8 +66,6 @@ def bulk_upsert_saunas(db: Session, saunas: List[SaunaBase]) -> List[SaunaDB]:
                 db.add(db_sauna)
             
             updated_saunas.append(db_sauna)
-            
-            # 個別にフラッシュして問題があればすぐに検出
             db.flush()
 
         # 全ての処理が成功したらコミット
@@ -71,18 +77,11 @@ def bulk_upsert_saunas(db: Session, saunas: List[SaunaBase]) -> List[SaunaDB]:
         db.rollback()
         raise
 
-def get_sauna_ranking(db: Session, limit: int = 10) -> List[SaunaDB]:
+def get_sauna_ranking(db: Session, limit: int = 50, db_model: Type[Any] = SaunaDB) -> List[Any]:
     """
     レビュー数の多い順にサウナをランキング取得
-
-    Args:
-        db: データベースセッション
-        limit: 取得する上位件数
-
-    Returns:
-        List[SaunaDB]: ランキング順のサウナリスト
     """
-    return db.query(SaunaDB)\
-        .order_by(SaunaDB.review_count.desc())\
+    return db.query(db_model)\
+        .order_by(db_model.review_count.desc())\
         .limit(limit)\
         .all() 

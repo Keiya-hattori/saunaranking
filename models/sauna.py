@@ -5,7 +5,7 @@ from typing import Optional
 class SaunaBase(BaseModel):
     """サウナの基本情報を格納するベースモデル"""
     name: str = Field(..., description="サウナの名称")
-    url: str = Field(..., description="サウナイキタイの詳細ページURL")
+    url: HttpUrl = Field(..., description="サウナイキタイの詳細ページURL")
     review_count: int = Field(default=0, description="「穴場」キーワードを含むレビュー数")
     last_updated: datetime = Field(
         default_factory=datetime.now,
@@ -28,9 +28,21 @@ class SaunaInDB(SaunaBase):
         from_attributes = True
 
 class SaunaRanking(BaseModel):
-    """ランキング表示用のモデル"""
-    rank: int = Field(..., description="ランキング順位")
-    sauna: SaunaBase
+    """ランキング表示用のモデル（穴場）"""
+    name: str
+    url: HttpUrl
+    review_count: int
+    last_updated: datetime
+
+    class Config:
+        from_attributes = True
+
+class SaunaRankingKashikiri(BaseModel):
+    """ランキング表示用のモデル（貸切）"""
+    name: str
+    url: HttpUrl
+    review_count: int
+    last_updated: datetime
 
     class Config:
         from_attributes = True 

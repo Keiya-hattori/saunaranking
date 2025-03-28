@@ -137,39 +137,39 @@ class SaunaScraper:
             logger.error(f"レビュー数の取得に失敗しました: {e}")
             return 0 
 
-    def generate_page_url(self, page: int) -> str:
-        """ページ番号からURLを生成"""
-        return f"{self.base_url}/posts?keyword=穴場&page={page}&prefecture[0]=tokyo"
+    def generate_page_url(self, page: int, keyword: str = "穴場") -> str:
+        """ページ番号とキーワードからURLを生成"""
+        encoded_keyword = requests.utils.quote(keyword)
+        return f"{self.base_url}/posts?keyword={encoded_keyword}&page={page}&prefecture[0]=tokyo"
 
-    def load_last_scraped_page(self, db: Session) -> int:
-        """データベースから最後にスクレイピングしたページ番号を読み込む"""
+    def load_last_scraped_page(self, db: Session, key_prefix: str = "last_page") -> int:
+        """最後にスクレイピングしたページ番号を読み込む"""
         try:
-            stmt = select(ScrapingState).where(ScrapingState.key == "last_page")
+            stmt = select(ScrapingState).where(ScrapingState.key == key_prefix)
             result = db.execute(stmt).scalar_one_or_none()
             
             if result is None:
-                # 初回実行時は新しいレコードを作成
-                state = ScrapingState(key="last_page", value=self.DEFAULT_START_PAGE)
+                state = ScrapingState(key=key_prefix, value=1)
                 db.add(state)
                 db.commit()
-                return self.DEFAULT_START_PAGE
+                return 1
                 
             return result.value
             
         except Exception as e:
             logger.error(f"前回のページ情報の読み込みに失敗しました: {e}")
-            return self.DEFAULT_START_PAGE
+            return 1
 
-    def save_last_scraped_page(self, db: Session, page: int) -> None:
-        """次回のスタートページ番号をデータベースに保存"""
+    def save_last_scraped_page(self, db: Session, page: int, key_prefix: str = "last_page") -> None:
+        """次回のスタートページ番号を保存"""
         try:
-            stmt = select(ScrapingState).where(ScrapingState.key == "last_page")
+            stmt = select(ScrapingState).where(ScrapingState.key == key_prefix)
             state = db.execute(stmt).scalar_one_or_none()
             
             if state:
                 state.value = page
             else:
-                state = ScrapingState(key="last_page", value=page)
+                state = ScrapingState(key=key_prefix, value=page)
                 db.add(state)
                 
             db.commit()
@@ -179,28 +179,18 @@ class SaunaScraper:
             logger.error(f"ページ情報の保存に失敗しました: {e}")
             db.rollback()
 
-    def scrape_multiple_pages(self, start_page: int, num_pages: int = 1) -> List[SaunaBase]:
-        """
-        指定したページ数分のサウナ情報をスクレイピング
-
-        Args:
-            start_page: 開始ページ番号
-            num_pages: スクレイピングするページ数（デフォルト3）
-
-        Returns:
-            List[SaunaBase]: 収集したサウナ情報のリスト
-        """
+    def scrape_multiple_pages(self, start_page: int, num_pages: int = 1, keyword: str = "穴場") -> List[SaunaBase]:
+        """指定したページ数分のサウナ情報をスクレイピング"""
         all_saunas = []
         end_page = start_page + num_pages
 
         for page in range(start_page, end_page):
             try:
-                logger.info(f"ページ {page} のスクレイピングを開始します")
-                url = self.generate_page_url(page)
+                logger.info(f"キーワード「{keyword}」のページ {page} をスクレイピング開始")
+                url = self.generate_page_url(page, keyword)
                 page_saunas = self.scrape_sauna_reviews(url)
                 all_saunas.extend(page_saunas)
                 
-                # 最後のページ以外で待機
                 if page < end_page - 1:
                     logger.info(f"{self.wait_time}秒待機します...")
                     time.sleep(self.wait_time)
@@ -211,19 +201,17 @@ class SaunaScraper:
 
         return all_saunas
 
-    def run_scheduled_scraping(self, db: Session, num_pages: int = 3) -> List[SaunaBase]:
-        """
-        前回の続きから指定ページ数分のスクレイピングを実行
-        """
+    def run_scheduled_scraping(self, db: Session, num_pages: int = 1, keyword: str = "穴場", key_prefix: str = "last_page") -> List[SaunaBase]:
+        """前回の続きから指定ページ数分のスクレイピングを実行"""
         # 前回の続きのページをDBから読み込む
-        start_page = self.load_last_scraped_page(db)
-        logger.info(f"ページ {start_page} からスクレイピングを開始します")
+        start_page = self.load_last_scraped_page(db, key_prefix)
+        logger.info(f"キーワード「{keyword}」のページ {start_page} からスクレイピングを開始")
 
         # スクレイピングを実行
-        saunas = self.scrape_multiple_pages(start_page, num_pages)
+        saunas = self.scrape_multiple_pages(start_page, num_pages, keyword)
 
         # 次回の開始ページを保存
         next_start_page = start_page + num_pages
-        self.save_last_scraped_page(db, next_start_page)
+        self.save_last_scraped_page(db, next_start_page, key_prefix)
 
-        return saunas 
+        return saunas
