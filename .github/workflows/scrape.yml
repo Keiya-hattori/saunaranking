@@ -17,25 +17,6 @@ jobs:
           echo "Waiting for service to wake up..."
           sleep 30
           
-      - name: Run 穴場 Scraping
-        run: |
-          echo "Starting 穴場 scraping..."
-          response=$(curl -s -w "\n%{http_code}" https://saunaranking-ver2-fastapi.onrender.com/api/github-action-scraping)
-          
-          # レスポンスからステータスコードと本文を分離
-          status_code=$(echo "$response" | tail -n1)
-          body=$(echo "$response" | sed '$d')
-          
-          echo "Status code: $status_code"
-          echo "Response body: $body"
-          
-          if [ "$status_code" -ne 200 ]; then
-            echo "Error: 穴場 Scraping failed"
-            # 続行するためにexitしない
-          fi
-          
-          # スクレイピング間隔を空ける
-          sleep 10
           
       - name: Run 貸切 Scraping
         run: |
@@ -58,3 +39,6 @@ jobs:
         run: |
           echo "Waking up Streamlit..."
           curl -s https://sauna-ranking-ver2.onrender.com
+          response=$(curl -s -w "\n%{http_code}" https://sauna-ranking-ver2.onrender.com)
+          status_code=$(echo "$response" | tail -n1)
+          echo "Streamlit status: $status_code"
