@@ -5,7 +5,7 @@ import time
 import os
 
 # FastAPI エンドポイントのURL
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+API_BASE_URL = ""  # 空文字は現在のホストを使用
 
 # ページ設定
 st.set_page_config(
@@ -51,7 +51,10 @@ st.markdown("""
 def get_sauna_ranking(endpoint="/api/ranking"):
     """FastAPIエンドポイントからランキングデータを取得"""
     try:
-        response = requests.get(f"{API_BASE_URL}{endpoint}")
+        # 現在のホストの同じポートにリクエスト
+        url = f"{API_BASE_URL}{endpoint}"
+        st.sidebar.info(f"Requesting: {url}")
+        response = requests.get(url)
         response.raise_for_status()
         
         # JSONデータをDataFrameに変換
