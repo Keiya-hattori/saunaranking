@@ -50,18 +50,18 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-@st.cache_data(ttl=660)  # 2分間キャッシュ
+#@st.cache_data(ttl=660)  # 2分間キャッシュ
 def get_sauna_ranking():
     """FastAPIエンドポイントからランキングデータを取得"""
     try:
         # まずヘルスチェックを実行してサービスを起動
-        health_response = requests.get(f"{API_BASE_URL}/health")
+        health_response = requests.get(f"{API_BASE_URL}/health",timeout=5)
         if health_response.status_code != 200:
             st.warning("APIサービスの起動中です。少々お待ちください...")
             time.sleep(5)  # 5秒待機
         
         # ランキングデータを取得
-        response = requests.get(f"{API_BASE_URL}/api/ranking")
+        response = requests.get(f"{API_BASE_URL}/api/ranking",timeout=10)
         response.raise_for_status()
         
         # JSONデータをDataFrameに変換
